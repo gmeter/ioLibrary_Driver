@@ -9,6 +9,9 @@
 #include "httpParser.h"
 #include "httpUtil.h"
 
+#ifdef _USE_FS_
+#include "fs.h"
+#endif
 #ifdef	_USE_SDCARD_
 #include "ff.h" 	// header file for FatFs library (FAT file system)
 #endif
@@ -16,6 +19,10 @@
 #ifndef DATA_BUF_SIZE
 	#define DATA_BUF_SIZE		2048
 #endif
+
+struct fs_file file_handle;
+struct fs_file *handle;
+const char *file;       /* Pointer to first unsent byte in buf. */
 
 /*****************************************************************************
  * Private types/enumerations/variables
@@ -141,7 +148,7 @@ void httpServer_run(uint8_t seqnum)
 			{
 				setSn_IR(s, Sn_IR_CON);
 			}
-			printf("SOCK_ESTABLISHED %lld   %lld\n", s, SOCK_ESTABLISHED);
+			//printf("SOCK_ESTABLISHED %lld   %lld\n", s, SOCK_ESTABLISHED);
 			// HTTP Process states
 			switch(HTTPSock_Status[seqnum].sock_status)
 			{
@@ -400,12 +407,40 @@ static void send_http_response_body(uint8_t s, uint8_t * uri_name, uint8_t * buf
 	//HTTPSock_Status[get_seqnum]->storage_type == SDCARD
 	//HTTPSock_Status[get_seqnum]->storage_type == DATAFLASH
 /*****************************************************/
-
+#ifndef _USE_FS_
 	if(HTTPSock_Status[get_seqnum].storage_type == CODEFLASH)
 	{
 		if(HTTPSock_Status[get_seqnum].file_len) start_addr = HTTPSock_Status[get_seqnum].file_start;
 		read_userReg_webContent(start_addr, &buf[0], HTTPSock_Status[get_seqnum].file_offset, send_len);
 	}
+#endif
+
+	#ifdef _USE_FS_
+	if(HTTPSock_Status[get_seqnum].storage_type == FS)
+	{
+		// must use send_len
+		int count = fs_read(&file_handle, &buf[0], send_len);
+		send_len = count;
+		if (count < 0) {
+			if (count == FS_READ_DELAYED) {
+			printf("Delayed read, wait for FS to unblock us \n");
+			//return 0;
+			}
+			/* We reached the end of the file so this request is done.
+			* @todo: close here for HTTP/1.1 when reading file fails */
+			#ifdef _HTTPSERVER_DEBUG_
+			printf("End of file.\n");
+			#endif
+			send_len = 0;
+			*(buf + file_handle.len +1) = 0; // Insert '/0' for indicates the 'End of String' (null terminated)
+		}
+
+		#ifdef _HTTPSERVER_DEBUG_
+		printf ("Read %d bytes.\n", count);
+		#endif
+}
+	#endif
+
 #ifdef _USE_SDCARD_
 	else if(HTTPSock_Status[get_seqnum].storage_type == SDCARD)
 	{
@@ -550,6 +585,7 @@ static void http_process_handler(uint8_t s, st_http_request * p_http_request)
 			}
 			else
 			{
+#ifndef  _USE_FS_
 				// Find the User registered index for web content
 				if(find_userReg_webContent(uri_buf, &content_num, &file_len))
 				{
@@ -557,6 +593,20 @@ static void http_process_handler(uint8_t s, st_http_request * p_http_request)
 					content_addr = (uint32_t)content_num;
 					HTTPSock_Status[get_seqnum].storage_type = CODEFLASH;
 				}
+#endif
+#ifdef _USE_FS_
+				char full_uri_name[255];  // Choose an appropriate size for your case
+				sprintf(full_uri_name, "/%s", uri_name);
+
+				if(fs_open(&file_handle, full_uri_name) == ERR_OK)
+				{
+					content_found = 1; // file open succeed
+					HTTPSock_Status[get_seqnum].storage_type = FS;
+					file_len = file_handle.len;
+					content_addr = file_handle.index;
+				}
+				
+#endif
 				// Not CGI request, Web content in 'SD card' or 'Data flash' requested
 #ifdef _USE_SDCARD_
 #ifdef _HTTPSERVER_DEBUG_

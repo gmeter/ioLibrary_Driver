@@ -25,6 +25,8 @@ extern "C" {
 //#define _USE_FLASH_
 #endif
 
+#define _USE_FS_
+
 #if !defined(_USE_SDCARD_) && !defined(_USE_FLASH_)
 #define _NOTUSED_STORAGE_
 #endif
@@ -64,7 +66,8 @@ typedef enum
    NONE,		///< Web storage none
    CODEFLASH,	///< Code flash memory
    SDCARD,    	///< SD card
-   DATAFLASH	///< External data flash memory
+   DATAFLASH,	///< External data flash memory
+   FS ///< lwip fs
 }StorageType;
 
 typedef struct _st_http_socket
