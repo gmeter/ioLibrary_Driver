@@ -130,17 +130,18 @@ void httpServer_run(uint8_t seqnum)
 
 	// Get the H/W socket number
 	s = getHTTPSocketNum(seqnum);
-
+//printf(".");
 	/* HTTP Service Start */
 	switch(getSn_SR(s))
 	{
+		
 		case SOCK_ESTABLISHED:
 			// Interrupt clear
 			if(getSn_IR(s) & Sn_IR_CON)
 			{
 				setSn_IR(s, Sn_IR_CON);
 			}
-
+			printf("SOCK_ESTABLISHED %lld   %lld\n", s, SOCK_ESTABLISHED);
 			// HTTP Process states
 			switch(HTTPSock_Status[seqnum].sock_status)
 			{
@@ -239,14 +240,22 @@ void httpServer_run(uint8_t seqnum)
 			}
 			break;
 
+		case SOCK_UDP:
+			printf("\nSocket is type UDP!\n");
+			close(s);
+			break;
+
 		case SOCK_INIT:
+		//printf("SOCK_INIT %lld\n",s);
 			listen(s);
 			break;
 
 		case SOCK_LISTEN:
+		//printf("SOCK_LISTEN %lld\n",s);
 			break;
 
 		default :
+		//printf(" DEFAULT   %lld   %lld\n", s, SOCK_ESTABLISHED);
 			break;
 
 	} // end of switch
